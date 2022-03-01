@@ -1,0 +1,464 @@
+---
+title: "HarvardX Capstone Project 2: Wine Quality"
+author: "Annie Zhang"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+```
+
+
+## INTRODUCTION/OVERVIEW
+
+For some of us stuck at home during quarantine, you may have made the time a little easier with a glass of wine or two... or maybe you even became a wine connoisseur? If you've ever gone wine tasting, you may have experienced the somewhat pretentious subjective evaluation of wine quality. But some studies have shown that actually with blind wine tasting, the judgement of wine quality even by professional wine tasting experts is highly unreliable and inconsistent. So then, is there actually a more objective way to evaluate wine quality?
+
+This is my submission for the second project of the HarvardX Data Science Capstone course. In this project, a Wine quality dataset will be explored and models made for predicting quality score based on the various different objective chemical attributes of the wine. 
+
+*“Wine improves with age. The older I get, the better I like it.” - Anonymous*
+
+### Project Objective
+
+The goal of this project is to predict wine quality scores given data on objective wine component measures such as fixed acidity, volatile acidity, citric acid, residual sugar, chlorides, sulfur dioxide, density, pH, sulphates, and alcohol. Various different regression models will be used. The strength of each model will be assessed by comparing the predicted ratings with the validation subset via RMSE.
+
+RMSE, or root mean squared error, is used to measure model accuracy. A low RMSE indicates better model performance. RMSE penalizes for larger errors due to the squaring. The best model for movie prediction will be the one with the lowest RMSE.
+
+RMSE is calculated as follows:
+
+![](RMSE.jpg)
+
+## Exploratory Analysis
+
+### The Dataset
+
+The dataset to be used is sourced from the UCI Machine Learning Repository. Only the red wine dataset will be used.
+It consists of 1599 rows of wine quality observations with 12 columns of variables.
+
+The direct link is as follows: https://archive.ics.uci.edu/ml/datasets/Wine+Quality
+
+I took a good long browse of the UCI Machine Learning Repository before coming across this interesting and amusing gem. I thought it would be fun to see what kinds of models could be made to predict wine quality.
+
+### Import and View Dataset
+
+```{r}
+
+#import data from csv file
+data <- read.csv2("winequality-red.csv", stringsAsFactors=FALSE, header=TRUE)
+
+#take a look at the data
+head(data)
+summary(data)
+str(data)
+
+```
+
+### Data Pre-Processing
+
+```{r}
+
+# convert variables to numeric
+data$fixed.acidity <- as.numeric(data$fixed.acidity)
+data$volatile.acidity <- as.numeric(data$volatile.acidity)
+data$citric.acid <- as.numeric(data$citric.acid)
+data$residual.sugar <- as.numeric(data$residual.sugar)
+data$chlorides <- as.numeric(data$chlorides)
+data$free.sulfur.dioxide <- as.numeric(data$free.sulfur.dioxide)
+data$total.sulfur.dioxide <- as.numeric(data$total.sulfur.dioxide)
+data$density <- as.numeric(data$density)
+data$pH <- as.numeric(data$pH)
+data$sulphates <- as.numeric(data$sulphates)
+data$alcohol <- as.numeric(data$alcohol)
+
+library(tidyverse)
+library(caret)
+library(data.table)
+
+# Validation set will be 10% of MovieLens data
+set.seed(1)
+test_index <- createDataPartition(y = data$quality, times = 1, p = 0.2, list = FALSE)
+training <- data[-test_index,]
+test <- data[test_index,]
+
+# can also remove quality score from validation set
+test_withoutquality <- test %>% select(-quality)
+
+```
+
+In the data pre-processing stage, I converted all predictor variables from character to numeric so it can be useful for analysis. Then I divided the dataset into the training and validation sets at random, with 80% training and 20% test set. This ratio was chosen because it's a good standard split that balances between variance and bias. If the training set is too large, there will be too much variance in prediction, but if the training set is too small, there may be more bias.
+
+### Data Visualization
+
+```{r}
+
+# Plot of distribution of quality scores
+hist(data$quality)
+
+```
+
+```{r}
+
+library(graphics)
+
+par(mfrow=c(4,3), mar = c(4, 4, 1, 2))
+
+# Plot of Quality vs. Fixed Acidity
+plot(quality~fixed.acidity,data=data,
+main="Quality Score vs. Fixed Acidity",
+col="steelblue3")
+
+# Plot of Quality vs. Volatile Acidity
+plot(quality~fixed.acidity,data=data,
+main="Quality Score vs. Volatile Acidity",
+col="steelblue3")
+
+# Plot of Quality vs. Citric Acid
+plot(quality~citric.acid,data=data,
+main="Quality Score vs. Citric Acid",
+col="steelblue3")
+
+# Plot of Quality vs. Residual Sugar
+plot(quality~residual.sugar,data=data,
+main="Quality Score vs. Residual Sugar",
+col="steelblue3")
+
+# Plot of Quality vs. Chlorides
+plot(quality~chlorides,data=data,
+main="Quality Score vs. Chlorides",
+col="steelblue3")
+
+# Plot of Quality vs. free.sulfur.dioxide
+plot(quality~free.sulfur.dioxide,data=data,
+main="Quality Score vs. Free SO2",
+col="steelblue3")
+
+# Plot of Quality vs. total.sulfur.dioxide
+plot(quality~total.sulfur.dioxide,data=data,
+main="Quality Score vs. Total SO2",
+col="steelblue3")
+
+# Plot of Quality vs. Density
+plot(quality~density,data=data,
+main="Quality Score vs. Density",
+col="steelblue3")
+
+# Plot of Quality vs. pH
+plot(quality~pH,data=data,
+main="Quality Score vs. pH",
+col="steelblue3")
+
+# Plot of Quality vs. Sulphates
+plot(quality~sulphates,data=data,
+main="Quality Score vs. Sulphates",
+col="steelblue3")
+
+# Plot of Quality vs. Alcohol
+plot(quality~alcohol,data=data,
+main="Quality Score vs. Alcohol",
+col="steelblue3")
+
+
+```
+
+The plots above show every predictor against the dependent variable (quality).
+The histogram shows the general distribution of the dependent variable. Of note is that the dependent variable is discrete.
+
+## Variable Exploration
+
+```{r}
+
+# plot of all variables against each other
+plot(data)
+
+# Calculate correlations table (removed categorical variable)
+library(corrplot)
+correlations <- cor(data)
+correlations
+
+# Display correlation plot
+corrplot(correlations, order="hclust")
+
+```
+
+The above plots show the correlations of all the variables with each other. There is moderate levels of correlation between the predictors.
+
+----
+
+## METHODS/ANALYSIS
+
+## 1. Multivariate Regression Models
+
+A multivariate regression model is appropriate to model this dataset for the purpose of our objective, because it models the relationship between the multiple predictors and the dependent response variable, quality score. As we have 11 predictors, it is called multivariate regression. Regression can be used to predict values of the response variable given values of the predictor variables.
+
+We will first build two multivariate regression models using all the predictors. We will build these models using the training set. Model 2 has the potential outliers removed, as determined using Cook's distance as above.
+
+```{r}
+
+# Build first basic multivariate regression model with all predictors and data
+model1 <- lm(quality~., data=training)
+summary(model1)
+
+```
+
+## Data Processing
+
+```{r}
+
+# Plot of Cook’s Distance
+cooks <- cooks.distance(model1)
+plot(cooks,type="h", lwd=3, col="steelblue3", ylab="Cook’s Distance")
+abline(1,0,col="steelblue1")
+
+# Identify possible outliers
+outliers <- as.numeric(names(cooks)[(cooks > 0.04)])
+outliers
+
+# Remove possible outliers
+training2 <- training[-c(152, 653, 1236),]
+
+
+# Build second multiple linear regression model without possible outliers
+model2<-lm(quality~., data=training2)
+summary(model2)
+
+```
+
+
+```{r}
+
+library(car)
+
+# Display VIF
+vif(model2)
+
+# Compute Threshold for VIF
+1/(1-summary(model2)$r.squared)
+
+```
+
+It appears that there is some multicollinearity between the predictors. This is because the VIF (Variance Inflation Factor) of most predictor variables exceed the threshold of 1.576901. 
+
+As such, the next step is to remove redundant or insignicant predictor variables to create a reduced model.
+
+```{r}
+
+# Build third multiple linear regression model without possible outliers and redundant predictor variables
+model3<-lm(quality~volatile.acidity+chlorides+total.sulfur.dioxide+sulphates+alcohol, data=training2)
+summary(model3)
+
+# Display VIF
+vif(model3)
+
+# Compute VIF Threshold
+1/(1-summary(model3)$r.squared)
+
+
+```
+
+Using only the predictors with p-values less than 0.001 in model 2, I created model 3. Now the VIF of all predictors is less than the threshold, meaning multicollinearity is no longer an issue.
+
+Of note that to better select predictor variables to include in the reduced model, Principal Component Analysis (PCA) can be done (but that in of itself can be a project so I simplified my method). Note that the p-values of the coefficient of each variable is based on a t-test and the result of significance is only such given all other predictors in the model. The most technically correct way to create a reduced model is to do PCA or other method of feature selection and then conduct a partial F-test to determine if the reduced model is better than the full model.
+
+### Analysis of Multivariate Regression Models
+
+```{r}
+
+# Find standardized residuals
+resids <- rstandard(model3)
+
+par(mfrow=c(1,2))
+
+plot(model2$fitted.values, resids, main="Residuals vs Fitted",
+xlab="Fitted Values", ylab="Residuals")
+abline(h=0, col="red")
+
+```
+
+```{r}
+
+# Look at residuals plots
+par(mfrow=c(1,2))
+
+hist(resids, col="steelblue3", nclass=15, main="Histogram of Residuals")
+qqPlot(resids, main="Normal QQ Probability Plot")
+qqline(resids, col="steelblue3")
+
+```
+
+The distribution of the residuals appears normal, based on the histogram, and looks generally normal with some heavy tails.
+
+Interestingly enough the residual vs fitted plot shows a significant pattern of residuals. This type of diagonal pattern is common when the dependent variable is discrete, as is the case in this dataset.
+
+----
+
+## 2. K-Nearest Neighbours Models
+
+The classification model that is appropriate for our objective is one that is a multiclass classifier and supervised learning. It is multiclass because there is more than one class given the dependent variable, quality, is discrete from 3 to 8. This is supervised learning because the quality scores are known in the training dataset. As such, an appropriate model to use is the KNN model.
+
+The k Nearest Neighbours Model is a non-parametric algorithm useful when classifying more than 2 classes. It does not result in a classifier equation, but rather classifies each data point based on its nearest neighbours. The variable k refers to the number of neighbours taken into consideration. The value of k is a hyperparameter that can be optimized.
+
+### Running The KNN Model
+
+```{r}
+
+library(kknn)
+library(tidyverse)
+library(FNN)
+
+# Put response in its own object
+quality_response <- data %>% select(quality)
+
+# Define response in each subset
+response_train <- quality_response[-test_index, ]
+response_test <- quality_response[test_index, ]
+
+# define function to calculate RMSE
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted) ^ 2))
+}
+
+# Check different values of k
+
+# For k=1
+modelknn <- knn.reg(training, test=NULL, response_train, k = 1)
+predictions <- as.integer(modelknn$pred)
+rmse(response_train, predictions)
+
+# For k=3
+modelknn <- knn.reg(training, test=NULL, response_train, k = 3)
+predictions <- as.integer(modelknn$pred)
+rmse(response_train, predictions)
+
+# For k=5
+modelknn <- knn.reg(training, test=NULL, response_train, k = 5)
+predictions <- as.integer(modelknn$pred)
+rmse(response_train, predictions)
+
+# For k=10
+modelknn <- knn.reg(training, test=NULL, response_train, k = 10)
+predictions <- as.integer(modelknn$pred)
+rmse(response_train, predictions)
+
+# For k=15
+modelknn <- knn.reg(training, test=NULL, response_train, k = 15)
+predictions <- as.integer(modelknn$pred)
+rmse(response_train, predictions)
+
+# For k=30
+modelknn <- knn.reg(training, test=NULL, response_train, k = 30)
+predictions <- as.integer(modelknn$pred)
+rmse(response_train, predictions)
+
+
+```
+
+
+
+To make this model, I used the knn.reg function in the FNN library to make predictions for each row of observations based on the K Nearest Neighbours approach. K is a hyperparameter to be selected for the model. The value of k chosen indicates the number of neighbours used in the model to predict classification. Since there are 1278 rows of observations in the training set, the maximum possible value for k would be 1278. But that would not be a useful model, so I tested values of k up to 30 since the rule of thumb is the squareroot of the number of rows, which in this case is around 35.7.
+
+In order to determine the best k to use, I created a function to check the RMSE accuracy. In this case the accuracy is in terms of the training data set itself. So comparing the predicted values with the known quality scores in the training set. The k value with the lowest RMSE is k=1. So we can use this value for our model.
+
+At a k value of 1, the RMSE against the training dataset itself was lowest. A smaller k is more computationally cost effective. Larger k values have greater bias, and smaller k values have greater variance or noisiness. 
+
+```{r}
+
+# Our final KNN model
+KNN_model <- knn.reg(training, test=NULL, response_train, k = 1)
+head(KNN_model)
+
+```
+
+----
+
+## RESULTS
+
+In this section, we will finally determine the accuracy of each model against "new" data, ie. the test dataset. This is meant to determine which model is better suited for our objective of predicting wine quality scores.
+
+### Multivariate Regression Model RMSE Evaluation
+
+The rmse function has been defined earlier and we will use it here again.
+
+```{r}
+
+# KNN model used to predict test dataset
+predicted_reg <- predict(model3, test)
+
+# Calculate RMSE against test dataset
+reg_rmse <- rmse(response_test, predicted_reg)
+reg_rmse
+
+```
+
+The RMSE of the chosen multivariate regression model (which indicates true accuracy because it is compared to test data) is 0.625. This indicates moderately good accuracy.
+
+```{r}
+
+#Compare RMSE to other regression models
+
+# Model 1
+predicted_reg1 <- predict(model1, test)
+reg_rmse1 <- rmse(response_test, predicted_reg1)
+reg_rmse1
+
+# Model 2
+predicted_reg2 <- predict(model2, test)
+reg_rmse2 <- rmse(response_test, predicted_reg2)
+reg_rmse2
+
+```
+
+Compared to the other multivariate regression models, Model 3 is indeed the best regression model in terms of RMSE, although the improvement is quite minor.
+
+### K Nearest Neighbours Model RMSE Evaluation
+
+```{r}
+
+# KNN model used to predict test dataset
+KNN_model2 <- knn.reg(train=training, test=test, y=response_train, k = 1)
+predicted_knn <- as.integer(KNN_model2$pred)
+
+# Calculate RMSE against test dataset
+knn_rmse <- rmse(response_test, predicted_knn)
+knn_rmse
+
+```
+
+The RMSE of the chosen KNN model (true accuracy because compared to test data) is 0.585. As compared to the validation accuracy of 0.60 it is actually lower, although accuracy against a the test dataset is expected to be lower than against the training dataset itself.
+
+```{r}
+
+# Create RMSE table of RMSE results, starting with regression model
+rmsetable <- data.frame(Model="Multivariate Regression Model", RMSE = reg_rmse)
+
+# Add KNN model RMSE results
+rmsetable <- bind_rows(rmsetable, data_frame(Model="K Nearest Neighbours Model", RMSE = knn_rmse))
+  
+# Load RMSE table
+rmsetable %>% knitr::kable()
+
+```
+
+----
+
+## CONCLUSION
+
+Using RMSE for comparison of models, we can see that the better model with the lower RMSE is the K Nearest Neighbours Model. The KNN model had a RMSE of 0.5853880 compared to the multivariate regression model with an RMSE of 0.6252424.
+
+In our preliminary analyses of the red wine dataset, we discovered that there are 11 quantitative continuous predictors for one discrete quantitative response variable, quality. The data was initially processed to be split into 80% training and 20% test data sets. This is in consideration of the bias variance tradeoff, where too small of a training set would mean greater bias but too large would mean greater variance in terms of predicting on new data (represented by the test set). We determined that a multivariate regression model would be appropriate for our objective of predicting response quality scores with given predictors. Another model we explored was the KNN model because it is suitable for multiclass supervised learning.
+
+To reflect on this result, I believe that the RMSE of the multivariate regression model could further be improved, given more time to explore feature selection methods such as principal component analysis to better select which predictors to include. A partial F test could then be done to determine if the reduced model is significantly better. Overall, two models have been built to fulfill our objective of predicting wine quality scores.
+
+So perhaps, instead of relying on subjective judgement of wine quality, it is possible to predict wine quality based on objective quantitative measures in wine chemistry such asfixed acidity, volatile acidity, citric acid, residual sugar, chlorides, sulfur dioxide, density, pH, sulphates, and alcohol. In terms of potential impact, the multivariate regression and KNN models have shown some moderate promise for predicting wine quality, given these predictors. For future work, one can look into exploring other predictors such as age of wine, brand, winery location, and more to see how they affect wine quality and aid in its prediction.
+
+*“Life is too short to drink bad wine.” - Anonymous*
+
+----
+
+\center
+© Copyright Xu Anne (Annie) Zhang
+\center
+
+\
+
